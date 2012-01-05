@@ -1,7 +1,11 @@
 import smarkets.eto.EtoPiqi;
 import smarkets.seto.SetoPiqi;
 import java.io.*;
-import java.net.Socket;
+import javax.net.ssl.X509TrustManager;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 import com.google.protobuf.CodedOutputStream;
 import com.google.protobuf.ByteString;
 
@@ -27,8 +31,9 @@ public class Go
         System.out.println(payload.toString());
         try
         {
-            Socket sock = new Socket("api-sandbox.smarkets.com", 3701);
-            CodedOutputStream co = CodedOutputStream.newInstance(sock.getOutputStream());
+            SSLSocketFactory fac = trustAll().getSocketFactory();
+            SSLSocket ssl = (SSLSocket)fac.createSocket("api-dev.corp.smarkets.com", 3701);
+            CodedOutputStream co = CodedOutputStream.newInstance(ssl.getOutputStream());
             System.out.println("Logging in...");
             
             int byteCount = payload.getSerializedSize();
@@ -36,8 +41,8 @@ public class Go
             payload.writeTo(co);
             co.writeRawBytes(padding(byteCount));
             co.flush();
-            sock.getOutputStream().flush();
-            BufferedReader in = new BufferedReader(new InputStreamReader(sock.getInputStream()));
+            ssl.getOutputStream().flush();
+            BufferedReader in = new BufferedReader(new InputStreamReader(ssl.getInputStream()));
             while (!in.ready()) {}
             System.out.println("Reading...");
             System.out.println(in.read()); // Read one line and output it
@@ -76,5 +81,29 @@ public class Go
         }
         out.write(bits);
         return out.toByteString().toByteArray();
+    }
+    
+    public static SSLContext trustAll() throws Exception
+    {
+        // cert not checked for now on sandbox
+        // Create a trust manager that does not validate certificate chains
+        TrustManager[] trustAllCerts = new TrustManager[]{
+            new X509TrustManager() {
+                public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                    return null;
+                }
+                public void checkClientTrusted(
+                    java.security.cert.X509Certificate[] certs, String authType) {
+                }
+                public void checkServerTrusted(
+                    java.security.cert.X509Certificate[] certs, String authType) {
+                }
+            }
+        };
+
+        // Install the all-trusting trust manager
+        SSLContext sc = SSLContext.getInstance("SSL");
+        sc.init(null, trustAllCerts, new java.security.SecureRandom());
+        return sc;
     }
 }
